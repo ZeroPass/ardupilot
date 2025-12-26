@@ -111,6 +111,10 @@ void Copter::init_ardupilot()
 #if HAL_MOUNT_ENABLED
     // initialise camera mount
     camera_mount.init();
+
+    // Force a defined mount target at boot: level the FC (roll=0, pitch=0).
+    // This continuously corrects because the Servo mount backend subtracts AHRS roll/pitch every update (~50Hz).
+    camera_mount.set_angle_target(0, 0.0f, 0.0f, 0.0f, false);
 #endif
 
 #if AP_CAMERA_ENABLED
