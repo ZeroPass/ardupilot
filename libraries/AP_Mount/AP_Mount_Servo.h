@@ -70,5 +70,6 @@ private:
     SRV_Channel::Function    _pan_idx;   // SRV_Channel mount pan  function index
 
     Vector3f _angle_bf_output_rad;  // final body frame output angle in radians
+    Vector2f _lvl_i_out_rad;        // PI leveling integrator output (radians)
 };
 #endif // HAL_MOUNT_SERVO_ENABLED

@@ -173,6 +173,31 @@ const AP_Param::GroupInfo AP_Mount_Params::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("_OPTIONS", 16, AP_Mount_Params, options, 0),
 
+    // @Param: _LVL_P
+    // @DisplayName: Mount leveling P gain
+    // @Description: Servo backend only. Proportional gain applied to angle error (target - vehicle angle) when calculating roll/pitch outputs. 1.0 matches legacy behaviour.
+    // @Range: 0.0 5.0
+    // @Increment: 0.05
+    // @User: Advanced
+    AP_GROUPINFO("_LVL_P", 17, AP_Mount_Params, lvl_p, 1.0f),
+
+    // @Param: _LVL_I
+    // @DisplayName: Mount leveling I gain
+    // @Description: Servo backend only. Integral gain applied to angle error (target - vehicle angle). Enables the mount to keep increasing command until the error reduces (or limits are hit).
+    // @Range: 0.0 5.0
+    // @Increment: 0.05
+    // @User: Advanced
+    AP_GROUPINFO("_LVL_I", 18, AP_Mount_Params, lvl_i, 0.0f),
+
+    // @Param: _LVL_IMAX
+    // @DisplayName: Mount leveling I max
+    // @Description: Servo backend only. Maximum absolute contribution of the I term, in degrees. Set to 0 to disable the I term.
+    // @Units: deg
+    // @Range: 0 180
+    // @Increment: 1
+    // @User: Advanced
+    AP_GROUPINFO("_LVL_IMAX", 19, AP_Mount_Params, lvl_imax, 0.0f),
+
     AP_GROUPEND
 };
 
