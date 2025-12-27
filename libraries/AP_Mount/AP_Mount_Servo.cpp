@@ -5,6 +5,7 @@
 #include "AP_Mount_Servo.h"
 
 #include <AP_AHRS/AP_AHRS.h>
+#include <AP_Scheduler/AP_Scheduler.h>
 #include <GCS_MAVLink/GCS_MAVLink.h>
 
 extern const AP_HAL::HAL& hal;
@@ -107,6 +108,7 @@ void AP_Mount_Servo::update_angle_outputs(const MountAngleTarget& angle_rad)
     switch (get_mode()) {
     case MAV_MOUNT_MODE_RETRACT:
     case MAV_MOUNT_MODE_NEUTRAL:
+        _lvl_i_out_rad = {};   // avoid windup when stabilization is disabled
         return;
     case MAV_MOUNT_MODE_MAVLINK_TARGETING...MAV_MOUNT_MODE_ENUM_END:
         break;
@@ -114,8 +116,11 @@ void AP_Mount_Servo::update_angle_outputs(const MountAngleTarget& angle_rad)
 
     // this is sufficient for self-stabilising brushless gimbals
     if (!requires_stabilization) {
+        _lvl_i_out_rad = {};
         return;
     }
+
+    const float dt = AP::scheduler().get_loop_period_s();
 
     // retrieve lean angles from ahrs
     Vector2f ahrs_angle_rad = {ahrs.get_roll_rad(), ahrs.get_pitch_rad()};
@@ -125,9 +130,25 @@ void AP_Mount_Servo::update_angle_outputs(const MountAngleTarget& angle_rad)
         ahrs_angle_rad.rotate(-yaw_bf_rad);
     }
 
-    // add roll and pitch lean angle correction
-    _angle_bf_output_rad.x -= ahrs_angle_rad.x;
-    _angle_bf_output_rad.y -= ahrs_angle_rad.y;
+    // PI on angle error (target - vehicle angle). With MNTx_LVL_P=1 and MNTx_LVL_I=0 this matches legacy behaviour.
+    const Vector2f err = {angle_rad.roll - ahrs_angle_rad.x,
+                          angle_rad.pitch - ahrs_angle_rad.y};
+
+    const float p = _params.lvl_p.get();
+    const float i = _params.lvl_i.get();
+    const float imax_rad = radians(_params.lvl_imax.get());
+
+    if (i > 0.0f && imax_rad > 0.0f && dt > 0.0f) {
+        _lvl_i_out_rad.x += err.x * i * dt;
+        _lvl_i_out_rad.y += err.y * i * dt;
+        _lvl_i_out_rad.x = constrain_float(_lvl_i_out_rad.x, -imax_rad, imax_rad);
+        _lvl_i_out_rad.y = constrain_float(_lvl_i_out_rad.y, -imax_rad, imax_rad);
+    } else {
+        _lvl_i_out_rad = {};
+    }
+
+    _angle_bf_output_rad.x = err.x * p + _lvl_i_out_rad.x;
+    _angle_bf_output_rad.y = err.y * p + _lvl_i_out_rad.y;
 
     // lead filter
     const Vector3f &gyro = ahrs.get_gyro();
