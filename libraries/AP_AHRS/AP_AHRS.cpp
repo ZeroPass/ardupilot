@@ -1136,9 +1136,9 @@ bool AP_AHRS::_airspeed_TAS(Vector3f &vec) const
     return false;
 }
 
-// return the innovation in m/s, innovation variance in (m/s)^2 and age in msec of the last TAS measurement processed
+// return the innovation in m/s, innovation variance in (m/s)^2 and age in msec of the last TAS measurement processed for a given sensor instance
 // returns false if the data is unavailable
-bool AP_AHRS::airspeed_health_data(float &innovation, float &innovationVariance, uint32_t &age_ms) const
+bool AP_AHRS::airspeed_health_data(uint8_t instance, float &innovation, float &innovationVariance, uint32_t &age_ms) const
 {
     switch (active_EKF_type()) {
 #if AP_AHRS_DCM_ENABLED
@@ -1152,7 +1152,7 @@ bool AP_AHRS::airspeed_health_data(float &innovation, float &innovationVariance,
 
 #if HAL_NAVEKF3_AVAILABLE
     case EKFType::THREE:
-        return EKF3.getAirSpdHealthData(innovation, innovationVariance, age_ms);
+        return EKF3.getAirSpdHealthData(instance, innovation, innovationVariance, age_ms);
 #endif
 
 #if AP_AHRS_SIM_ENABLED
@@ -1202,17 +1202,23 @@ bool AP_AHRS::use_compass(void)
     return false;
 }
 
-// return the quaternion defining the rotation from NED to XYZ (body) axes
 bool AP_AHRS::_get_quaternion(Quaternion &quat) const
+{
+    return _get_quaternion_for_ekf_type(quat, active_EKF_type());
+}
+
+// return the quaternion defining the rotation from NED to XYZ (body) axes
+bool AP_AHRS::_get_quaternion_for_ekf_type(Quaternion &quat, EKFType type) const
 {
     // backends always return in autopilot XYZ frame; rotate result
     // according to trim
-    switch (active_EKF_type()) {
+    switch (type) {
 #if AP_AHRS_DCM_ENABLED
     case EKFType::DCM:
-        if (!dcm.get_quaternion(quat)) {
+        if (!dcm_estimates.attitude_valid) {
             return false;
         }
+        quat = dcm_estimates.quaternion;
         break;
 #endif
 #if HAL_NAVEKF2_AVAILABLE
@@ -1233,15 +1239,20 @@ bool AP_AHRS::_get_quaternion(Quaternion &quat) const
 #endif
 #if AP_AHRS_SIM_ENABLED
     case EKFType::SIM:
-        if (!sim.get_quaternion(quat)) {
+        if (!sim_estimates.attitude_valid) {
             return false;
         }
+        quat = sim_estimates.quaternion;
         break;
 #endif
 #if AP_AHRS_EXTERNAL_ENABLED
     case EKFType::EXTERNAL:
         // we assume the external AHRS isn't trimmed with the autopilot!
-        return external.get_quaternion(quat);
+        if (!external_estimates.attitude_valid) {
+            return false;
+        }
+        quat = external_estimates.quaternion;
+        return true;
 #endif
     }
 
@@ -1266,7 +1277,7 @@ bool AP_AHRS::_get_secondary_attitude(Vector3f &eulers) const
         eulers[0] = dcm_estimates.roll_rad;
         eulers[1] = dcm_estimates.pitch_rad;
         eulers[2] = dcm_estimates.yaw_rad;
-        return true;
+        return dcm_estimates.attitude_valid;
 #endif
 
 #if HAL_NAVEKF2_AVAILABLE
@@ -1286,7 +1297,10 @@ bool AP_AHRS::_get_secondary_attitude(Vector3f &eulers) const
 #if AP_AHRS_SIM_ENABLED
     case EKFType::SIM:
         // SITL is secondary (should never happen)
-        return false;
+        eulers[0] = sim_estimates.roll_rad;
+        eulers[1] = sim_estimates.pitch_rad;
+        eulers[2] = sim_estimates.yaw_rad;
+        return sim_estimates.attitude_valid;
 #endif
 
 #if AP_AHRS_EXTERNAL_ENABLED
@@ -1295,7 +1309,7 @@ bool AP_AHRS::_get_secondary_attitude(Vector3f &eulers) const
         eulers[0] = external_estimates.roll_rad;
         eulers[1] = external_estimates.pitch_rad;
         eulers[2] = external_estimates.yaw_rad;
-        return true;
+        return external_estimates.attitude_valid;
     }
 #endif
     }
@@ -1312,54 +1326,7 @@ bool AP_AHRS::_get_secondary_quaternion(Quaternion &quat) const
     if (!_get_secondary_EKF_type(secondary_ekf_type)) {
         return false;
     }
-
-    switch (secondary_ekf_type) {
-
-#if AP_AHRS_DCM_ENABLED
-    case EKFType::DCM:
-        // DCM is secondary
-        if (!dcm.get_quaternion(quat)) {
-            return false;
-        }
-        break;
-#endif
-
-#if HAL_NAVEKF2_AVAILABLE
-    case EKFType::TWO:
-        // EKF2 is secondary
-        if (!_ekf2_started) {
-            return false;
-        }
-        EKF2.getQuaternion(quat);
-        break;
-#endif
-
-#if HAL_NAVEKF3_AVAILABLE
-    case EKFType::THREE:
-        // EKF3 is secondary
-        if (!_ekf3_started) {
-            return false;
-        }
-        EKF3.getQuaternion(quat);
-        break;
-#endif
-
-#if AP_AHRS_SIM_ENABLED
-    case EKFType::SIM:
-        // SITL is secondary (should never happen)
-        return false;
-#endif
-
-#if AP_AHRS_EXTERNAL_ENABLED
-    case EKFType::EXTERNAL:
-        // External is secondary
-        return external.get_quaternion(quat);
-#endif
-    }
-
-    quat.rotate(-_trim.get());
-
-    return true;
+    return _get_quaternion_for_ekf_type(quat, secondary_ekf_type);
 }
 
 // return secondary position solution if available
@@ -1453,28 +1420,6 @@ Vector2f AP_AHRS::_groundspeed_vector(void)
 
 float AP_AHRS::_groundspeed(void)
 {
-    switch (active_EKF_type()) {
-#if AP_AHRS_DCM_ENABLED
-    case EKFType::DCM:
-        return dcm.groundspeed();
-#endif
-#if HAL_NAVEKF2_AVAILABLE
-    case EKFType::TWO:
-#endif
-
-#if HAL_NAVEKF3_AVAILABLE
-    case EKFType::THREE:
-#endif
-
-#if AP_AHRS_EXTERNAL_ENABLED
-    case EKFType::EXTERNAL:
-#endif
-
-#if AP_AHRS_SIM_ENABLED
-    case EKFType::SIM:
-#endif
-        break;
-    }
     return groundspeed_vector().length();
 }
 

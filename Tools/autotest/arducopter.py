@@ -5900,21 +5900,11 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
     def PayloadPlaceMission(self):
         """Test payload placing in auto."""
-        self.context_push()
-
         self.set_analog_rangefinder_parameters()
         self.set_servo_gripper_parameters()
         self.reboot_sitl()
 
-        self.load_mission("copter_payload_place.txt")
-        if self.mavproxy is not None:
-            self.mavproxy.send('wp list\n')
-
-        self.set_parameter("AUTO_OPTIONS", 3)
-        self.change_mode('AUTO')
-        self.wait_ready_to_arm()
-
-        self.arm_vehicle()
+        num_wp = self.load_and_start_mission("copter_payload_place.txt")
 
         self.wait_text("Gripper load releas(ed|ing)", timeout=90, regex=True)
         dist_limit = 1
@@ -5929,11 +5919,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException("Did not honour target lat/lng (dist=%f want <%f" %
                                        (dist, dist_limit))
 
-        self.wait_disarmed()
-
-        self.context_pop()
-        self.reboot_sitl()
-        self.progress("All done")
+        self.wait_waypoint(num_wp-1, num_wp-1)
+        self.do_RTL()
 
     def PayloadPlaceMissionOpenGripper(self):
         '''test running the mission when the gripper is open'''
@@ -6210,6 +6197,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         return min(max(pitch_angle_deg, PITCH_MIN), PITCH_MAX)
 
     def test_mount_pitch(self, despitch, despitch_tolerance, mount_mode, timeout=10, hold=0, constrained=True):
+        self.set_mount_mode(mount_mode)
         tstart = self.get_sim_time()
         success_start = 0
 
@@ -6639,6 +6627,39 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.setup_servo_mount()
         self.reboot_sitl() # to handle MNT_TYPE changing
         self.mount_test_body()
+
+    def MountPOIFromAuxFunction(self):
+        '''test we can lock onto a lat/lng/alt with the flick of a switch'''
+        self.install_terrain_handlers_context()
+        self.setup_servo_mount()
+        self.set_parameters({
+            "RC10_OPTION": 186,
+            "MNT1_RC_RATE": 0,
+            "TERRAIN_ENABLE": 1,
+            "SIM_TERRAIN": 1,
+        })
+        self.reboot_sitl()  # to handle MNT1_TYPE changing # to handle MNT1_TYPE changing
+        self.wait_ready_to_arm()
+
+        self.takeoff(10, mode='GUIDED')
+        self.set_rc(6, 1000)
+        self.set_rc(10, 1900)  # engage poi lock
+
+        self.progress("checking mount angles")
+        mount_roll, mount_pitch, mount_yaw, mount_yaw_is_absolute = self.get_mount_roll_pitch_yaw_deg()
+        assert -46 <= mount_pitch <= -44, f"Pitch is out of range: {mount_pitch}"
+        self.fly_guided_move_local(100, 100, 70)   # move and check that pitch and yaw track
+        mount_roll, mount_pitch, mount_yaw, mount_yaw_is_absolute = self.get_mount_roll_pitch_yaw_deg()
+        assert -17 <= mount_pitch <= -15, f"Pitch2 is out of range: {mount_pitch}"
+        assert -179 <= mount_yaw <= -176, f"Yaw2 is out of range: {mount_yaw}"
+        self.set_rc(10, 1500)  # switch to middle to return to RC target mode and check that mount reverts to initial angles
+        mount_roll, mount_pitch, mount_yaw, mount_yaw_is_absolute = self.get_mount_roll_pitch_yaw_deg()
+        assert -46 <= mount_pitch <= -44, f"Pitch3 is out of range: {mount_pitch}"
+        assert -1 <= mount_yaw <= 1, f"Yaw3 is out of range: {mount_yaw}"
+
+        self.change_mode('RTL')
+        self.wait_disarmed()
+        self.assert_at_home()
 
     def MountSolo(self):
         '''test type=2, a "Solo" mount'''
@@ -9321,15 +9342,15 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.customise_SITL_commandline(["--serial5=sim:loweheiser"])
 
         self.set_parameters({
-            "GEN_IDLE_TH": 25,
-            "GEN_IDLE_TH_H": 40,
-            "GEN_RUN_TEMP": 60,
-            "GEN_IDLE_TEMP": 80,
+            "GEN_L_IDLE_TH": 25,
+            "GEN_L_IDLE_TH_H": 40,
+            "GEN_L_RUN_TEMP": 60,
+            "GEN_L_IDLE_TEMP": 80,
         })
 
         self.reboot_sitl()
 
-        self.assert_parameter_value("GEN_IDLE_TH", 25)
+        self.assert_parameter_value("GEN_L_IDLE_TH", 25)
 
         self.delay_sim_time(10)  # so we can actually receive messages...
 
@@ -9624,15 +9645,15 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.customise_SITL_commandline(["--serial5=sim:loweheiser"])
 
         self.set_parameters({
-            "GEN_IDLE_TH": 25,
-            "GEN_IDLE_TH_H": 40,
-            "GEN_RUN_TEMP": 60,
-            "GEN_IDLE_TEMP": 80,
+            "GEN_L_IDLE_TH": 25,
+            "GEN_L_IDLE_TH_H": 40,
+            "GEN_L_RUN_TEMP": 60,
+            "GEN_L_IDLE_TEMP": 80,
         })
 
         self.reboot_sitl()
 
-        self.assert_parameter_value("GEN_IDLE_TH", 25)
+        self.assert_parameter_value("GEN_L_IDLE_TH", 25)
 
         self.delay_sim_time(10)  # so we can actually receive messages...
 
@@ -11133,6 +11154,31 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         return current_log_filepath
 
+    def test_replay_gps_yaw_bit(self):
+        self.load_default_params_file("copter-gps-for-yaw.parm")
+        self.set_parameters({
+            "LOG_REPLAY": 1,
+            "LOG_DISARMED": 1,
+        })
+        self.zero_throttle()
+        self.reboot_sitl()
+
+        self.wait_sensor_state(mavutil.mavlink.MAV_SYS_STATUS_LOGGING, True, True, True)
+        self.wait_gps_fix_type_gte(6, message_type="GPS2_RAW", verbose=True)
+
+        current_log_filepath = self.current_onboard_log_filepath()
+        self.progress("Current log path: %s" % str(current_log_filepath))
+
+        self.change_mode("LOITER")
+        self.wait_ready_to_arm(require_absolute=True)
+        self.arm_vehicle()
+        self.takeoffAndMoveAway()
+        self.do_RTL()
+
+        self.reboot_sitl()
+
+        return current_log_filepath
+
     def test_replay_beacon_bit(self):
         self.set_parameters({
             "LOG_REPLAY": 1,
@@ -11142,6 +11188,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         old_onboard_logs = sorted(self.log_list())
         self.BeaconPosition()
         new_onboard_logs = sorted(self.log_list())
+
+        self.reboot_sitl()
 
         log_difference = [x for x in new_onboard_logs if x not in old_onboard_logs]
         return log_difference[1] # index depends on the reboots and ordering thereof in BeaconPosition!
@@ -11520,6 +11568,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         bits = [
             ('GPS', self.test_replay_gps_bit),
+            ('GPSForYaw', self.test_replay_gps_yaw_bit),
             ('Beacon', self.test_replay_beacon_bit),
             ('OpticalFlow', self.test_replay_optical_flow_bit),
         ]
@@ -12877,6 +12926,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.MAV_CMD_DO_MOUNT_CONTROL,
              self.MAV_CMD_DO_GIMBAL_MANAGER_CONFIGURE,
              self.AutoYawDO_MOUNT_CONTROL,
+             self.MountPOIFromAuxFunction,
              self.Button,
              self.ShipTakeoff,
              self.RangeFinder,

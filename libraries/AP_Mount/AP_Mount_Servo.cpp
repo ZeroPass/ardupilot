@@ -105,17 +105,20 @@ void AP_Mount_Servo::update_angle_outputs(const MountAngleTarget& angle_rad)
     _angle_bf_output_rad.z = yaw_bf_rad;
 
     // do no stabilization in retract or neutral:
-    switch (get_mode()) {
-    case MAV_MOUNT_MODE_RETRACT:
-    case MAV_MOUNT_MODE_NEUTRAL:
+    switch (mnt_target.target_type) {
+    case MountTargetType::NEUTRAL:
+    case MountTargetType::RETRACTED:
         _lvl_i_out_rad = {};   // avoid windup when stabilization is disabled
         return;
-    case MAV_MOUNT_MODE_MAVLINK_TARGETING...MAV_MOUNT_MODE_ENUM_END:
+    case MountTargetType::ANGLE:
+    case MountTargetType::RATE:
         break;
     }
 
-    // this is sufficient for self-stabilising brushless gimbals
+    // only have to adjust roll/pitch for body frame in self-stabilising brushless gimbals
     if (!requires_stabilization) {
+        //since this is a shared backend, must call this directly
+        AP_Mount_Backend::adjust_mnt_target_if_RP_locked();
         _lvl_i_out_rad = {};
         return;
     }
@@ -130,25 +133,44 @@ void AP_Mount_Servo::update_angle_outputs(const MountAngleTarget& angle_rad)
         ahrs_angle_rad.rotate(-yaw_bf_rad);
     }
 
-    // PI on angle error (target - vehicle angle). With MNTx_LVL_P=1 and MNTx_LVL_I=0 this matches legacy behaviour.
-    const Vector2f err = {angle_rad.roll - ahrs_angle_rad.x,
-                          angle_rad.pitch - ahrs_angle_rad.y};
-
+    // PI on angle error (target - vehicle angle) for earth-frame targets.
     const float p = _params.lvl_p.get();
     const float i = _params.lvl_i.get();
     const float imax_rad = radians(_params.lvl_imax.get());
 
+    Vector2f err{};
+    if (angle_rad.roll_is_ef) {
+        err.x = angle_rad.roll - ahrs_angle_rad.x;
+    }
+    if (angle_rad.pitch_is_ef) {
+        err.y = angle_rad.pitch - ahrs_angle_rad.y;
+    }
+
     if (i > 0.0f && imax_rad > 0.0f && dt > 0.0f) {
-        _lvl_i_out_rad.x += err.x * i * dt;
-        _lvl_i_out_rad.y += err.y * i * dt;
-        _lvl_i_out_rad.x = constrain_float(_lvl_i_out_rad.x, -imax_rad, imax_rad);
-        _lvl_i_out_rad.y = constrain_float(_lvl_i_out_rad.y, -imax_rad, imax_rad);
+        if (angle_rad.roll_is_ef) {
+            _lvl_i_out_rad.x += err.x * i * dt;
+            _lvl_i_out_rad.x = constrain_float(_lvl_i_out_rad.x, -imax_rad, imax_rad);
+        } else {
+            _lvl_i_out_rad.x = 0.0f;
+        }
+
+        if (angle_rad.pitch_is_ef) {
+            _lvl_i_out_rad.y += err.y * i * dt;
+            _lvl_i_out_rad.y = constrain_float(_lvl_i_out_rad.y, -imax_rad, imax_rad);
+        } else {
+            _lvl_i_out_rad.y = 0.0f;
+        }
     } else {
         _lvl_i_out_rad = {};
     }
 
-    _angle_bf_output_rad.x = err.x * p + _lvl_i_out_rad.x;
-    _angle_bf_output_rad.y = err.y * p + _lvl_i_out_rad.y;
+    if (angle_rad.roll_is_ef) {
+        _angle_bf_output_rad.x = err.x * p + _lvl_i_out_rad.x;
+    }
+
+    if (angle_rad.pitch_is_ef) {
+        _angle_bf_output_rad.y = err.y * p + _lvl_i_out_rad.y;
+    }
 
     // lead filter
     const Vector3f &gyro = ahrs.get_gyro();

@@ -875,26 +875,6 @@ MAV_RESULT GCS_MAVLINK_Copter::handle_command_pause_continue(const mavlink_comma
     return MAV_RESULT_DENIED;
 }
 
-#if HAL_MOUNT_ENABLED
-void GCS_MAVLINK_Copter::handle_mount_message(const mavlink_message_t &msg)
-{
-    switch (msg.msgid) {
-    case MAVLINK_MSG_ID_MOUNT_CONTROL:
-        // if vehicle has a camera mount but it doesn't do pan control then yaw the entire vehicle instead
-        if ((copter.camera_mount.get_mount_type() != AP_Mount::Type::None) &&
-            (copter.camera_mount.get_mode() == MAV_MOUNT_MODE_MAVLINK_TARGETING) &&
-            !copter.camera_mount.has_pan_control()) {
-            // Per the handler in AP_Mount, MOUNT_CONTROL yaw angle is in body frame, which is
-            // equivalent to an offset to the current yaw demand.
-            const float yaw_offset_deg = mavlink_msg_mount_control_get_input_c(&msg) * 0.01f;
-            copter.flightmode->auto_yaw.set_yaw_angle_offset_deg(yaw_offset_deg);
-            break;
-        }
-    }
-    GCS_MAVLINK::handle_mount_message(msg);
-}
-#endif
-
 // this is called on receipt of a MANUAL_CONTROL packet and is
 // expected to call manual_override to override RC input on desired
 // axes.
@@ -1535,11 +1515,11 @@ uint8_t GCS_MAVLINK_Copter::send_available_mode(uint8_t index) const
     // Have to deal with is separately because its number and name can change depending on if were in it or not
     if (index_zero == 0) {
         mode_number = (uint8_t)Mode::Number::AUTO_RTL;
-        name = "AUTO RTL";
+        name = "Auto RTL";
 
     } else if (index_zero == 1) {
         mode_number = (uint8_t)Mode::Number::AUTO;
-        name = "AUTO";
+        name = "Auto";
 
     }
 #endif
