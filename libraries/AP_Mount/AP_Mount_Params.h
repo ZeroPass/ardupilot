@@ -30,8 +30,10 @@ public:
     AP_Float    roll_stb_lead;      // roll lead control gain (only used by servo backend)
     AP_Float    pitch_stb_lead;     // pitch lead control gain (only used by servo backend)
     AP_Float    lvl_p;              // servo backend: roll/pitch PI leveling proportional gain (1.0 matches legacy)
+    AP_Float    lvl_p_fast;         // servo backend: roll/pitch fast leveling proportional gain (used when abs(error) > lvl_thr)
     AP_Float    lvl_i;              // servo backend: roll/pitch PI leveling integral gain
     AP_Float    lvl_imax;           // servo backend: roll/pitch PI leveling integrator max output in degrees (0 disables I)
+    AP_Float    lvl_thr;            // servo backend: leveling error threshold (deg) for switching to fast leveling (0 disables)
     AP_Int8     lvl_mode;           // servo backend: leveling mode (0=continuous PI, 1=step-once)
     AP_Float    lvl_trig;           // servo backend: step-once trigger threshold (deg). 0 disables
     AP_Float    lvl_stop;           // servo backend: step-once re-arm threshold (deg)

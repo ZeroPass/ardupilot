@@ -110,6 +110,8 @@ private:
     uint32_t _slew_last_update_ms = 0;  // last time slew limiter ran (ms)
     Vector2f _lvl_i_out_rad;        // PI leveling integrator output (radians)
     uint32_t _lvl_last_update_ms = 0; // last time update_angle_outputs ran (ms)
+    bool _lvl_fast_roll = false;    // true when roll uses fast leveling gain (MNTx_LVL_THR)
+    bool _lvl_fast_pitch = false;   // true when pitch uses fast leveling gain (MNTx_LVL_THR)
 
     // Step-once leveling bias (used when MNTx_LVL_MODE=StepOnce).
     Vector2f _lvl_step_bias_rad;    // bias added to earth-frame roll/pitch targets (radians)
