@@ -198,6 +198,185 @@ const AP_Param::GroupInfo AP_Mount_Params::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("_LVL_IMAX", 19, AP_Mount_Params, lvl_imax, 0.0f),
 
+    // @Param: _LVL_MODE
+    // @DisplayName: Mount leveling mode
+    // @Description: Servo backend only. Selects the roll/pitch leveling algorithm. Continuous PI is the standard ArduPilot behavior. Step-once is intended for vibration experiments where the mount should only update its compensation once per large disturbance.
+    // @Values: 0:ContinuousPI,1:StepOnce
+    // @User: Advanced
+    AP_GROUPINFO("_LVL_MODE", 20, AP_Mount_Params, lvl_mode, 0),
+
+    // @Param: _LVL_TRIG
+    // @DisplayName: Mount leveling step trigger
+    // @Description: Servo backend only (StepOnce). When absolute roll/pitch error exceeds this threshold, the mount will apply one compensation step then hold output until the error falls below _LVL_STOP. Set to 0 to disable StepOnce triggering.
+    // @Units: deg
+    // @Range: 0 180
+    // @Increment: 0.5
+    // @User: Advanced
+    AP_GROUPINFO("_LVL_TRIG", 21, AP_Mount_Params, lvl_trig, 0.0f),
+
+    // @Param: _LVL_STOP
+    // @DisplayName: Mount leveling step re-arm
+    // @Description: Servo backend only (StepOnce). The mount re-arms the next step once the absolute roll/pitch error is below this threshold.
+    // @Units: deg
+    // @Range: 0 180
+    // @Increment: 0.5
+    // @User: Advanced
+    AP_GROUPINFO("_LVL_STOP", 22, AP_Mount_Params, lvl_stop, 1.0f),
+
+    // @Param: _LVL_STEP
+    // @DisplayName: Mount leveling step gain
+    // @Description: Servo backend only (StepOnce). Multiplier applied to the measured roll/pitch error when updating the held compensation. 1.0 attempts a full correction in one step, lower values are more conservative.
+    // @Range: 0.0 2.0
+    // @Increment: 0.05
+    // @User: Advanced
+    AP_GROUPINFO("_LVL_STEP", 23, AP_Mount_Params, lvl_step, 1.0f),
+
+    // @Param: _LVL_RATE
+    // @DisplayName: Mount leveling step max rate
+    // @Description: Servo backend only (StepOnce). Maximum allowed roll/pitch rate (deg/s) for the step to trigger. This helps ensure the correction is applied after the platform stops moving. Set to 0 to disable rate gating.
+    // @Units: deg/s
+    // @Range: 0 500
+    // @Increment: 1
+    // @User: Advanced
+    AP_GROUPINFO("_LVL_RATE", 24, AP_Mount_Params, lvl_rate, 5.0f),
+
+    // @Param: _LVL_PERIOD
+    // @DisplayName: Mount leveling step period
+    // @Description: Servo backend only (StepOnce). Minimum time between additional compensation steps once a disturbance has triggered the step mode. This allows the mount to converge to level using discrete "kicks" instead of continuously updating every cycle. Set to 0 to keep the legacy StepOnce behavior (single step then hold until re-armed).
+    // @Units: s
+    // @Range: 0.0 5.0
+    // @Increment: 0.05
+    // @User: Advanced
+    AP_GROUPINFO("_LVL_PERIOD", 25, AP_Mount_Params, lvl_period, 0.25f),
+
+    // @Param: _LVL_SLEW
+    // @DisplayName: Mount leveling output slew rate
+    // @Description: Servo backend only. Limits the rate of change of the mount output angles (deg/s). This can soften response and reduce "step" motion, especially in StepOnce mode. Set to 0 to disable slew limiting.
+    // @Units: deg/s
+    // @Range: 0 1000
+    // @Increment: 1
+    // @User: Advanced
+    AP_GROUPINFO("_LVL_SLEW", 26, AP_Mount_Params, lvl_slew, 0.0f),
+
+    // @Param: _ILC_ENABLE
+    // @DisplayName: Mount ILC enable
+    // @Description: Servo backend only. Enables Iterative Learning Control (ILC) feedforward overlay on top of the existing stabilization controller. Learned state is held in RAM (non-persistent).
+    // @Values: 0:Disabled,1:Enabled
+    // @User: Advanced
+    AP_GROUPINFO("_ILC_ENABLE", 27, AP_Mount_Params, ilc_enable, 0),
+
+    // @Param: _ILC_AXIS
+    // @DisplayName: Mount ILC axis selection
+    // @Description: Servo backend only. Selects which axis the ILC feedforward applies to.
+    // @Values: 0:Roll+Pitch,1:PitchOnly,2:RollOnly
+    // @User: Advanced
+    AP_GROUPINFO("_ILC_AXIS", 28, AP_Mount_Params, ilc_axis, 0),
+
+    // @Param: _ILC_HZ
+    // @DisplayName: Mount ILC sample rate
+    // @Description: Servo backend only. Sample rate of the learned feedforward table.
+    // @Units: Hz
+    // @Range: 1 200
+    // @Increment: 1
+    // @User: Advanced
+    AP_GROUPINFO("_ILC_HZ", 29, AP_Mount_Params, ilc_hz, 50.0f),
+
+    // @Param: _ILC_HOR
+    // @DisplayName: Mount ILC horizon
+    // @Description: Servo backend only. Episode horizon length. The learned feedforward table covers this duration.
+    // @Units: s
+    // @Range: 0.2 10.0
+    // @Increment: 0.1
+    // @User: Advanced
+    AP_GROUPINFO("_ILC_HOR", 30, AP_Mount_Params, ilc_horizon, 2.0f),
+
+    // @Param: _ILC_LGAIN
+    // @DisplayName: Mount ILC learning gain
+    // @Description: Servo backend only. Learning gain applied to the previous episode error trace when updating the feedforward table.
+    // @Range: 0.0 2.0
+    // @Increment: 0.001
+    // @User: Advanced
+    AP_GROUPINFO("_ILC_LGAIN", 31, AP_Mount_Params, ilc_learn, 0.0f),
+
+    // @Param: _ILC_FORGET
+    // @DisplayName: Mount ILC forgetting factor
+    // @Description: Servo backend only. Forgetting factor (0..1). Higher values decay learned feedforward faster between episodes.
+    // @Range: 0.0 1.0
+    // @Increment: 0.01
+    // @User: Advanced
+    AP_GROUPINFO("_ILC_FORGET", 32, AP_Mount_Params, ilc_forget, 0.02f),
+
+    // @Param: _ILC_MAX
+    // @DisplayName: Mount ILC feedforward max
+    // @Description: Servo backend only. Maximum absolute feedforward bias applied by ILC.
+    // @Units: deg
+    // @Range: 0 180
+    // @Increment: 0.5
+    // @User: Advanced
+    AP_GROUPINFO("_ILC_MAX", 33, AP_Mount_Params, ilc_ff_max, 20.0f),
+
+    // @Param: _ILC_STMIN
+    // @DisplayName: Mount ILC start min error
+    // @Description: Servo backend only. Episode starts when abs(error) is between _ILC_STMIN and _ILC_STMAX, and abs(rate) <= _ILC_STRATE.
+    // @Units: deg
+    // @Range: 0 180
+    // @Increment: 0.5
+    // @User: Advanced
+    AP_GROUPINFO("_ILC_STMIN", 34, AP_Mount_Params, ilc_start_min, 5.0f),
+
+    // @Param: _ILC_STMAX
+    // @DisplayName: Mount ILC start max error
+    // @Description: Servo backend only. Episode starts when abs(error) is between _ILC_STMIN and this value.
+    // @Units: deg
+    // @Range: 0 180
+    // @Increment: 0.5
+    // @User: Advanced
+    AP_GROUPINFO("_ILC_STMAX", 35, AP_Mount_Params, ilc_start_max, 60.0f),
+
+    // @Param: _ILC_STRATE
+    // @DisplayName: Mount ILC start max rate
+    // @Description: Servo backend only. Episode start requires abs(rate) <= this value. Set to 0 to disable rate gating.
+    // @Units: deg/s
+    // @Range: 0 500
+    // @Increment: 1
+    // @User: Advanced
+    AP_GROUPINFO("_ILC_STRATE", 36, AP_Mount_Params, ilc_start_rate, 30.0f),
+
+    // @Param: _ILC_SETDEG
+    // @DisplayName: Mount ILC settle error
+    // @Description: Servo backend only. Episode ends once abs(error) is below this threshold for _ILC_SETT.
+    // @Units: deg
+    // @Range: 0 30
+    // @Increment: 0.1
+    // @User: Advanced
+    AP_GROUPINFO("_ILC_SETDEG", 37, AP_Mount_Params, ilc_settle_deg, 1.0f),
+
+    // @Param: _ILC_SETRATE
+    // @DisplayName: Mount ILC settle rate
+    // @Description: Servo backend only. Episode ends once abs(rate) is below this threshold for _ILC_SETT. Set to 0 to ignore rate.
+    // @Units: deg/s
+    // @Range: 0 500
+    // @Increment: 1
+    // @User: Advanced
+    AP_GROUPINFO("_ILC_SETRATE", 38, AP_Mount_Params, ilc_settle_rate, 10.0f),
+
+    // @Param: _ILC_SETT
+    // @DisplayName: Mount ILC settle time
+    // @Description: Servo backend only. Time that error/rate must remain within settle thresholds to end an episode and update the feedforward table.
+    // @Units: s
+    // @Range: 0.0 5.0
+    // @Increment: 0.05
+    // @User: Advanced
+    AP_GROUPINFO("_ILC_SETT", 39, AP_Mount_Params, ilc_settle_time, 0.3f),
+
+    // @Param: _ILC_SMOOTH
+    // @DisplayName: Mount ILC smoothing
+    // @Description: Servo backend only. Optional post-update smoothing factor (0..1) applied to the learned feedforward table. 0 disables smoothing.
+    // @Range: 0.0 1.0
+    // @Increment: 0.05
+    // @User: Advanced
+    AP_GROUPINFO("_ILC_SMOOTH", 40, AP_Mount_Params, ilc_smooth, 0.25f),
+
     AP_GROUPEND
 };
 

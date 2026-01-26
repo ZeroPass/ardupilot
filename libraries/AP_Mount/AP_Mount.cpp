@@ -599,6 +599,13 @@ MAV_RESULT AP_Mount::handle_command(const mavlink_command_int_t &packet, const m
         return handle_command_do_gimbal_manager_configure(packet, msg);
     case MAV_CMD_DO_SET_ROI_SYSID:
         return handle_command_do_set_roi_sysid(packet);
+    case MAV_CMD_USER_1: {
+        auto *backend = get_primary();
+        if (backend == nullptr) {
+            return MAV_RESULT_UNSUPPORTED;
+        }
+        return backend->handle_command_user1(packet, msg);
+    }
     default:
         return MAV_RESULT_UNSUPPORTED;
     }

@@ -194,6 +194,10 @@ void AP_Mount_Backend::set_angle_target(float roll_deg, float pitch_deg, float y
     mnt_target.angle_rad.roll = radians(roll_deg);
     mnt_target.angle_rad.pitch = radians(pitch_deg);
     mnt_target.angle_rad.yaw = radians(yaw_deg);
+    // roll and pitch targets are always earth-frame for ArduPilot's mount interface
+    // (except CADDX which may override via these flags).
+    mnt_target.angle_rad.roll_is_ef = true;
+    mnt_target.angle_rad.pitch_is_ef = true;
     mnt_target.angle_rad.yaw_is_ef = yaw_is_earth_frame;
 
     // set the mode to mavlink targeting

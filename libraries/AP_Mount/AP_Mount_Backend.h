@@ -128,6 +128,10 @@ public:
     // requires original message in order to extract caller's sysid and compid
     MAV_RESULT handle_command_do_gimbal_manager_configure(const mavlink_command_int_t &packet, const mavlink_message_t &msg);
 
+    // handle MAV_CMD_USER_1 (custom). Default: unsupported.
+    // Used by the servo backend to implement on-demand ILC table dump/load for tuning.
+    virtual MAV_RESULT handle_command_user1(const mavlink_command_int_t &packet, const mavlink_message_t &msg) { return MAV_RESULT_UNSUPPORTED; }
+
     // send a GIMBAL_DEVICE_ATTITUDE_STATUS message to GCS
     void send_gimbal_device_attitude_status(mavlink_channel_t chan);
 
