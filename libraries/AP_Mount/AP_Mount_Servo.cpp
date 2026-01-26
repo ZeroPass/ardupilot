@@ -32,9 +32,10 @@ void AP_Mount_Servo::init()
 
     _angle_bf_output_rad = {};
     _angle_bf_output_slew_rad = {};
-    _slew_last_update_ms = 0;
+    _send_last_update_us = 0;
+    _slew_last_update_us = 0;
     _lvl_i_out_rad = {};
-    _lvl_last_update_ms = 0;
+    _lvl_last_update_us = 0;
     _lvl_step_bias_rad = {};
     _lvl_step_armed_roll = true;
     _lvl_step_armed_pitch = true;
@@ -384,19 +385,38 @@ MAV_RESULT AP_Mount_Servo::handle_command_user1(const mavlink_command_int_t &pac
 // called by the backend to set the servo angles:
 void AP_Mount_Servo::send_target_angles(const MountAngleTarget& angle_rad)
 {
+    // Optional output update-rate limiting (Hz). This is useful when the vehicle
+    // scheduler loop rate is high, but the mount should be updated at a lower
+    // (or user-tunable) rate.
+    const float upd_hz = _params.upd_hz.get();
+    if (is_positive(upd_hz)) {
+        const uint32_t now_us = AP_HAL::micros();
+        uint32_t interval_us = (uint32_t)(1000000.0f / upd_hz + 0.5f);
+        if (interval_us < 1) {
+            interval_us = 1;
+        }
+        if (_send_last_update_us != 0 && (uint32_t)(now_us - _send_last_update_us) < interval_us) {
+            return;
+        }
+        _send_last_update_us = now_us;
+    } else {
+        // limiting disabled
+        _send_last_update_us = 0;
+    }
+
     update_angle_outputs(angle_rad);
 
     // Optional slew limiting (deg/s) to soften response and reduce "step" motion.
     const float slew_deg_s = _params.lvl_slew.get();
     if (is_positive(slew_deg_s)) {
-        const uint32_t now_ms = AP_HAL::millis();
+        const uint32_t now_us = AP_HAL::micros();
         float dt = 0.0f;
-        if (_slew_last_update_ms != 0) {
-            dt = (now_ms - _slew_last_update_ms) * 0.001f;
+        if (_slew_last_update_us != 0) {
+            dt = (now_us - _slew_last_update_us) * 1.0e-6f;
             // guard against very large dt (e.g. after pauses)
             dt = constrain_float(dt, 0.0f, 2.0f);
         }
-        _slew_last_update_ms = now_ms;
+        _slew_last_update_us = now_us;
 
         if (dt > 0.0f) {
             const float max_delta_rad = radians(slew_deg_s) * dt;
@@ -415,7 +435,7 @@ void AP_Mount_Servo::send_target_angles(const MountAngleTarget& angle_rad)
     } else {
         // slew limiting disabled
         _angle_bf_output_slew_rad = _angle_bf_output_rad;
-        _slew_last_update_ms = 0;
+        _slew_last_update_us = 0;
     }
 
     // write the results to the servos
@@ -474,14 +494,15 @@ void AP_Mount_Servo::update_angle_outputs(const MountAngleTarget& angle_rad)
 
     // Use elapsed time between mount updates (not scheduler loop period).
     // This keeps I-term behaviour consistent when outputs are updated at low rate.
-    const uint32_t now_ms = AP_HAL::millis();
+    const uint32_t now_us = AP_HAL::micros();
+    const uint32_t now_ms = now_us / 1000U;
     float dt = 0.0f;
-    if (_lvl_last_update_ms != 0) {
-        dt = (now_ms - _lvl_last_update_ms) * 0.001f;
+    if (_lvl_last_update_us != 0) {
+        dt = (now_us - _lvl_last_update_us) * 1.0e-6f;
         // guard against very large dt (e.g. after pauses)
         dt = constrain_float(dt, 0.0f, 2.0f);
     }
-    _lvl_last_update_ms = now_ms;
+    _lvl_last_update_us = now_us;
 
     // get target yaw in body-frame with limits applied
     const float yaw_bf_rad = constrain_float(angle_rad.get_bf_yaw(), radians(_params.yaw_angle_min), radians(_params.yaw_angle_max));

@@ -103,7 +103,9 @@ const AP_Scheduler::Task Plane::scheduler_tasks[] = {
     SCHED_TASK(airspeed_ratio_update,   1,    100,  102),
 #endif // AP_AIRSPEED_AUTOCAL_ENABLE
 #if HAL_MOUNT_ENABLED
-    SCHED_TASK_CLASS(AP_Mount, &plane.camera_mount, update, 50, 100, 105),
+    // Run mount update at scheduler loop rate (rate=0). The servo backend can
+    // optionally limit its own output update rate via MNTx_UPD_HZ.
+    SCHED_TASK_CLASS(AP_Mount, &plane.camera_mount, update, 0, 100, 105),
 #endif // HAL_MOUNT_ENABLED
 #if AP_CAMERA_ENABLED
     SCHED_TASK_CLASS(AP_Camera, &plane.camera, update,      50, 100, 108),

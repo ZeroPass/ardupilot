@@ -107,9 +107,10 @@ private:
 
     Vector3f _angle_bf_output_rad;  // final body frame output angle in radians
     Vector3f _angle_bf_output_slew_rad; // slew-limited body frame output angle in radians
-    uint32_t _slew_last_update_ms = 0;  // last time slew limiter ran (ms)
+    uint32_t _send_last_update_us = 0; // last time send_target_angles updated outputs (us)
+    uint32_t _slew_last_update_us = 0; // last time slew limiter ran (us)
     Vector2f _lvl_i_out_rad;        // PI leveling integrator output (radians)
-    uint32_t _lvl_last_update_ms = 0; // last time update_angle_outputs ran (ms)
+    uint32_t _lvl_last_update_us = 0; // last time update_angle_outputs ran (us)
     bool _lvl_fast_roll = false;    // true when roll uses fast leveling gain (MNTx_LVL_THR)
     bool _lvl_fast_pitch = false;   // true when pitch uses fast leveling gain (MNTx_LVL_THR)
 

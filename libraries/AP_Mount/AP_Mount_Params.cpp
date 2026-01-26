@@ -135,6 +135,15 @@ const AP_Param::GroupInfo AP_Mount_Params::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("_NEUTRAL", 11, AP_Mount_Params, neutral_angles, 0),
 
+    // @Param: _UPD_HZ
+    // @DisplayName: Mount servo update rate
+    // @Description: Servo backend only. Limits how often the mount updates its servo outputs. Set to 0 to update every scheduler tick (loop rate). Higher values can reduce "step" motion but may increase noise and CPU load.
+    // @Units: Hz
+    // @Range: 0 1000
+    // @Increment: 10
+    // @User: Advanced
+    AP_GROUPINFO("_UPD_HZ", 43, AP_Mount_Params, upd_hz, 50.0f),
+
     // @Param: _LEAD_RLL
     // @DisplayName: Mount Roll stabilization lead time
     // @Description: Servo mount roll angle output leads the vehicle angle by this amount of time based on current roll rate. Increase until the servo is responsive but does not overshoot

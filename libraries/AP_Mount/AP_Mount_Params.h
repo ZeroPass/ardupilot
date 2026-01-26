@@ -27,6 +27,7 @@ public:
     AP_Vector3f retract_angles;     // retracted position in degrees. vector.x = roll vector.y = pitch, vector.z=yaw
     AP_Vector3f neutral_angles;     // neutral position in degrees.  vector.x = roll vector.y = pitch, vector.z=yaw
 
+    AP_Float    upd_hz;             // servo backend: mount output update rate (Hz). 0 disables limiting (runs every scheduler tick)
     AP_Float    roll_stb_lead;      // roll lead control gain (only used by servo backend)
     AP_Float    pitch_stb_lead;     // pitch lead control gain (only used by servo backend)
     AP_Float    lvl_p;              // servo backend: roll/pitch PI leveling proportional gain (1.0 matches legacy)
