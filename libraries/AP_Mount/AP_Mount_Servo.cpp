@@ -71,7 +71,8 @@ float AP_Mount_Servo::ilc_step_axis(
     float u_min_rad,
     float u_max_rad,
     float dt_s,
-    uint32_t now_ms
+    uint32_t now_ms,
+    char axis_char
 )
 {
     // Always keep runtime state consistent when disabled
@@ -102,7 +103,7 @@ float AP_Mount_Servo::ilc_step_axis(
     const uint16_t settle_need = is_positive(settle_time_s) ?
         (uint16_t)constrain_int32(lroundf(settle_time_s * hz), 1, (int32_t)ILC_MAX_SAMPLES) : 0;
 
-    auto finish_episode = [&]() {
+    auto finish_episode = [&](bool settled) {
         if (is_positive(learn_gain) && st.last_k != 0xFFFF) {
             float *tbl = (st.sign0 > 0) ? st.ff_pos : st.ff_neg;
             const uint16_t k_end = MIN(st.last_k, (uint16_t)(N - 1));
@@ -132,6 +133,31 @@ float AP_Mount_Servo::ilc_step_axis(
         st.last_k = 0;
         st.settle_count = 0;
         st.episode_count++;
+
+#if HAL_GCS_ENABLED
+        // Emit a small MAVLink event when an episode ends so the host can prompt the user.
+        // Uses NAMED_VALUE_FLOAT so it is easy to read from scripts.
+        // Name format (<=10 chars): ILC + axis + sign + (EP|EV)
+        //  - ILC{axis}{sign}EP = episode count
+        //  - ILC{axis}{sign}EV = event code (1=settled, 2=timeout)
+        if (is_positive(learn_gain)) {
+            const char sign_char = (st.sign0 > 0) ? '+' : '-';
+            auto send_evt = [&](char c1, char c2, float value) {
+                char name[MAVLINK_MSG_NAMED_VALUE_FLOAT_FIELD_NAME_LEN] {};
+                name[0] = 'I';
+                name[1] = 'L';
+                name[2] = 'C';
+                name[3] = axis_char;
+                name[4] = sign_char;
+                name[5] = c1;
+                name[6] = c2;
+                name[7] = '\0';
+                gcs().send_named_float(name, value);
+            };
+            send_evt('E', 'P', (float)st.episode_count);
+            send_evt('E', 'V', settled ? 1.0f : 2.0f);
+        }
+#endif
     };
 
     // Start condition (episode boundary)
@@ -165,7 +191,7 @@ float AP_Mount_Servo::ilc_step_axis(
     const int32_t k32 = (int32_t)floorf(MAX(t_s, 0.0f) * hz);
     const uint16_t k = (uint16_t)k32;
     if (k >= N) {
-        finish_episode();
+        finish_episode(false);
         return u_fb_rad;
     }
 
@@ -193,7 +219,7 @@ float AP_Mount_Servo::ilc_step_axis(
             st.settle_count = 0;
         }
         if (st.settle_count >= settle_need) {
-            finish_episode();
+            finish_episode(true);
         }
     }
 
@@ -722,7 +748,8 @@ void AP_Mount_Servo::update_angle_outputs(const MountAngleTarget& angle_rad)
             roll_min_rad,
             roll_max_rad,
             dt,
-            now_ms
+            now_ms,
+            'R'
         );
 
         _angle_bf_output_rad.y = ilc_step_axis(
@@ -734,7 +761,8 @@ void AP_Mount_Servo::update_angle_outputs(const MountAngleTarget& angle_rad)
             pitch_min_rad,
             pitch_max_rad,
             dt,
-            now_ms
+            now_ms,
+            'P'
         );
     } else {
         _ilc_roll.reset_runtime();

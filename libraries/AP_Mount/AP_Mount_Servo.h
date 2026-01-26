@@ -93,7 +93,8 @@ private:
         float u_min_rad,
         float u_max_rad,
         float dt_s,
-        uint32_t now_ms
+        uint32_t now_ms,
+        char axis_char
     );
 
     /// Servo gimbals require stabilization, BrushlessPWM gimbals self-stabilize
