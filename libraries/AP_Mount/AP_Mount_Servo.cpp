@@ -109,6 +109,8 @@ void AP_Mount_Servo::update_angle_outputs(const MountAngleTarget& angle_rad)
     case MountTargetType::NEUTRAL:
     case MountTargetType::RETRACTED:
         _lvl_i_out_rad = {};   // avoid windup when stabilization is disabled
+        _lvl_fast_roll = false;
+        _lvl_fast_pitch = false;
         return;
     case MountTargetType::ANGLE:
     case MountTargetType::RATE:
@@ -120,10 +122,21 @@ void AP_Mount_Servo::update_angle_outputs(const MountAngleTarget& angle_rad)
         //since this is a shared backend, must call this directly
         AP_Mount_Backend::adjust_mnt_target_if_RP_locked();
         _lvl_i_out_rad = {};
+        _lvl_fast_roll = false;
+        _lvl_fast_pitch = false;
         return;
     }
 
-    const float dt = AP::scheduler().get_loop_period_s();
+    // Use elapsed time between mount updates (not scheduler loop period).
+    // This keeps the I-term behavior consistent even if SCHED_LOOP_RATE changes.
+    const uint32_t now_ms = AP_HAL::millis();
+    float dt = 0.0f;
+    if (_lvl_last_update_ms != 0) {
+        dt = (now_ms - _lvl_last_update_ms) * 0.001f;
+        // guard against very large dt (e.g. on first update after a pause)
+        dt = constrain_float(dt, 0.0f, 0.2f);
+    }
+    _lvl_last_update_ms = now_ms;
 
     // retrieve lean angles from ahrs
     Vector2f ahrs_angle_rad = {ahrs.get_roll_rad(), ahrs.get_pitch_rad()};
@@ -135,6 +148,7 @@ void AP_Mount_Servo::update_angle_outputs(const MountAngleTarget& angle_rad)
 
     // PI on angle error (target - vehicle angle) for earth-frame targets.
     const float p = _params.lvl_p.get();
+    const float p_fast = _params.lvl_p_fast.get();
     const float i = _params.lvl_i.get();
     const float imax_rad = radians(_params.lvl_imax.get());
 
@@ -146,6 +160,33 @@ void AP_Mount_Servo::update_angle_outputs(const MountAngleTarget& angle_rad)
         err.y = angle_rad.pitch - ahrs_angle_rad.y;
     }
 
+    // optional fast leveling: when error exceeds threshold, use fast behavior (P=p_fast)
+    const float lvl_thr_deg = _params.lvl_thr.get();
+    const float lvl_thr_rad = radians(lvl_thr_deg);
+    if (lvl_thr_deg > 0.0f) {
+        // apply simple hysteresis to avoid mode flapping with noise
+        const float lvl_thr_exit_rad = lvl_thr_rad * 0.5f;
+
+        if (angle_rad.roll_is_ef) {
+            const float abs_err = fabsf(err.x);
+            _lvl_fast_roll = _lvl_fast_roll ? (abs_err > lvl_thr_exit_rad) : (abs_err > lvl_thr_rad);
+        } else {
+            _lvl_fast_roll = false;
+        }
+
+        if (angle_rad.pitch_is_ef) {
+            const float abs_err = fabsf(err.y);
+            _lvl_fast_pitch = _lvl_fast_pitch ? (abs_err > lvl_thr_exit_rad) : (abs_err > lvl_thr_rad);
+        } else {
+            _lvl_fast_pitch = false;
+        }
+    } else {
+        _lvl_fast_roll = false;
+        _lvl_fast_pitch = false;
+    }
+
+    // I-term is active in both modes (when enabled) to allow offset holding even after
+    // a large disturbance (e.g. a base tilt) has been corrected.
     if (i > 0.0f && imax_rad > 0.0f && dt > 0.0f) {
         if (angle_rad.roll_is_ef) {
             _lvl_i_out_rad.x += err.x * i * dt;
@@ -160,16 +201,19 @@ void AP_Mount_Servo::update_angle_outputs(const MountAngleTarget& angle_rad)
         } else {
             _lvl_i_out_rad.y = 0.0f;
         }
-    } else {
+    } else if (i <= 0.0f || imax_rad <= 0.0f) {
+        // If I is disabled, clear integrator.
         _lvl_i_out_rad = {};
     }
 
     if (angle_rad.roll_is_ef) {
-        _angle_bf_output_rad.x = err.x * p + _lvl_i_out_rad.x;
+        const float p_eff = _lvl_fast_roll ? p_fast : p;
+        _angle_bf_output_rad.x = err.x * p_eff + _lvl_i_out_rad.x;
     }
 
     if (angle_rad.pitch_is_ef) {
-        _angle_bf_output_rad.y = err.y * p + _lvl_i_out_rad.y;
+        const float p_eff = _lvl_fast_pitch ? p_fast : p;
+        _angle_bf_output_rad.y = err.y * p_eff + _lvl_i_out_rad.y;
     }
 
     // lead filter

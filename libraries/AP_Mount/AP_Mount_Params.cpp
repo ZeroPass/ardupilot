@@ -198,6 +198,23 @@ const AP_Param::GroupInfo AP_Mount_Params::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("_LVL_IMAX", 19, AP_Mount_Params, lvl_imax, 0.0f),
 
+    // @Param: _LVL_THR
+    // @DisplayName: Mount leveling fast threshold
+    // @Description: Servo backend only. When the roll/pitch angle error exceeds this threshold (degrees), the mount uses fast leveling (P gain = _LVL_P_FAST). Set to 0 to disable and always use _LVL_P/_LVL_I.
+    // @Units: deg
+    // @Range: 0 45
+    // @Increment: 0.1
+    // @User: Advanced
+    AP_GROUPINFO("_LVL_THR", 20, AP_Mount_Params, lvl_thr, 0.0f),
+
+    // @Param: _LVL_P_FAST
+    // @DisplayName: Mount leveling fast P gain
+    // @Description: Servo backend only. Proportional gain applied to angle error (target - vehicle angle) while fast leveling is active (error > _LVL_THR). 1.0 matches legacy behaviour.
+    // @Range: 0.0 10.0
+    // @Increment: 0.05
+    // @User: Advanced
+    AP_GROUPINFO("_LVL_P_FAST", 21, AP_Mount_Params, lvl_p_fast, 1.0f),
+
     AP_GROUPEND
 };
 

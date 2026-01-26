@@ -71,5 +71,8 @@ private:
 
     Vector3f _angle_bf_output_rad;  // final body frame output angle in radians
     Vector2f _lvl_i_out_rad;        // PI leveling integrator output (radians)
+    bool _lvl_fast_roll = false;    // true when roll is in fast (legacy) leveling mode
+    bool _lvl_fast_pitch = false;   // true when pitch is in fast (legacy) leveling mode
+    uint32_t _lvl_last_update_ms = 0; // last time update_angle_outputs ran (ms)
 };
 #endif // HAL_MOUNT_SERVO_ENABLED
